@@ -7,6 +7,10 @@ CLI toolkit for trading perpetual futures on [Hyperliquid](https://hyperliquid.x
 
 Built to be operated by AI agents or manually from the terminal.
 
+### How it works
+
+HyperAgent is an **assisted decision stack**, not a fully autonomous bot. The scripts are deterministic tools that produce signals, scores, levels, and sizing suggestions. The **agent** (or human) is the decision layer on top — it interprets the data, applies judgment, and executes trades. See [`SKILL.md`](SKILL.md) for the full agent operating protocol.
+
 ## Features
 
 ### `hl-analysis.mjs` — Market Analysis
