@@ -7,7 +7,8 @@
     "analysis": "node hl-analysis.mjs",
     "trade": "node hl-trade.mjs",
     "cancel": "node hl-cancel.mjs",
-    "orderbook": "node hl-orderbook.mjs"
+    "orderbook": "node hl-orderbook.mjs",
+    "events": "node hl-events.mjs"
   },
   "dependencies": {
     "ethers": "^6.0.0",

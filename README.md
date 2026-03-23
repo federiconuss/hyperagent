@@ -116,6 +116,38 @@ node hl-orderbook.mjs ETH 50000
 
 **Output:** mid price, spread, bid/ask depth at 1%, slippage category (thick/normal/thin), estimated slippage percentage.
 
+### `hl-events.mjs` — Event Risk Layer
+
+Checks upcoming macro and crypto events, applies time-window rules, and outputs restrictions.
+
+**Data sources (100% free, no trials):**
+- **FRED API** (St. Louis Fed) — CPI, NFP, PCE, GDP, PPI release dates
+- **FOMC 2026 dates** — hardcoded from federalreserve.gov
+- **`events-crypto.json`** — manually maintained crypto events (unlocks, forks, listings)
+
+```bash
+node hl-events.mjs
+```
+
+**Output:**
+```
+=== EVENT RISK ===
+Status: HIGH
+Next: CPI in 4h 12m (Tier 1 — block)
+Active restrictions:
+  - BLOCK: CPI in 4h 12m
+```
+
+**Event tiers:**
+
+| Tier | Events | Rule |
+|---|---|---|
+| 1 (critical) | FOMC, CPI, NFP, PCE | Block entries 6h before, reduce 3h after |
+| 2 (secondary) | GDP, PPI | Reduce size 2h before, caution 1h after |
+| 3 (asset) | Token unlocks, forks, listings | Per-event action from `events-crypto.json` |
+
+Outputs a `EVENT_JSON:{...}` line for machine parsing by the agent.
+
 ### `nostr_post.mjs` — Nostr Publisher
 
 Posts a text note (kind 1) to Nostr relays. Useful for broadcasting trade signals.
@@ -143,7 +175,8 @@ Edit `.env` with your credentials:
 ```env
 HL_PRIVATE_KEY=0xYourPrivateKeyHere
 HL_ACCOUNT=0xYourWalletAddressHere
-NOSTR_SK=YourNostrSecretKeyHex
+FRED_API_KEY=YourFREDApiKey        # free at fred.stlouisfed.org
+NOSTR_SK=YourNostrSecretKeyHex     # optional
 ```
 
 Then load the env vars before running any script. You can use [dotenv-cli](https://www.npmjs.com/package/dotenv-cli) or export them manually:
@@ -174,6 +207,7 @@ All scripts are standalone Node.js ESM modules that communicate directly with th
 
 ```
 hl-analysis.mjs    reads    /info API (candles, meta, clearinghouse, orders)
+hl-events.mjs      reads    FRED API (macro dates) + events-crypto.json
 hl-trade.mjs       signs    EIP-712 → posts to /exchange API
 hl-cancel.mjs      signs    EIP-712 → posts to /exchange API
 hl-orderbook.mjs   reads    /info API (l2Book)
