@@ -34,6 +34,7 @@ Rules:
 - In `confirm-first`: present the trade plan (coin, direction, size, entry, SL, TP, conviction, event risk status) and wait for explicit approval.
 - In `auto-execute`: log every action taken so the operator can review.
 - In `defensive-only`: if a new high-conviction setup appears, inform the operator but do NOT execute.
+- **If execution mode is not yet chosen, do not place any orders.**
 
 ---
 

@@ -25,7 +25,7 @@ When the agent loads the skill, it runs a startup checklist:
 | Mode | Behavior |
 |---|---|
 | **confirm-first** | Analyzes and proposes trades, but waits for operator approval before executing. Default mode. |
-| **auto-execute** | Operates autonomously within hard limits and risk rules. Reports actions after the fact. |
+| **auto-execute** | Operates autonomously within hard limits and risk rules. Reports actions after execution. |
 | **defensive-only** | Only manages existing positions (trail SL, close losers, fix missing orders). Never opens new entries. |
 
 Hard limits (max exposure, max positions, SL/TP, drawdown pauses) apply in **all modes** — they are non-negotiable.
