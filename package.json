@@ -1,6 +1,6 @@
 {
   "name": "hyperagent",
-  "version": "1.0.0",
+  "version": "1.5.3",
   "description": "CLI tools for trading on Hyperliquid — analysis, order placement, cancellation, and orderbook depth",
   "type": "module",
   "scripts": {
