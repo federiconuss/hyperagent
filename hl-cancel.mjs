@@ -17,8 +17,12 @@ const IS_MAINNET = true;
 
 async function getAssetIndex(coin) {
   const data = await postInfo({ type: 'meta' });
-  return data.universe.findIndex(u => u.name === coin);
+  const idx = data.universe.findIndex(u => u.name === coin);
+  if (idx === -1) throw new Error(`Asset ${coin} not found. Use exact Hyperliquid name (e.g. BTC, ETH, SOL)`);
+  return idx;
 }
+
+const HTTP_TIMEOUT = 15000;
 
 function postInfo(body) {
   return new Promise((resolve, reject) => {
@@ -26,6 +30,7 @@ function postInfo(body) {
     const req = https.request({ hostname: 'api.hyperliquid.xyz', port: 443, path: '/info', method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(p) }
     }, res => { let d=''; res.on('data',c=>d+=c); res.on('end',()=>resolve(JSON.parse(d))); });
+    req.setTimeout(HTTP_TIMEOUT, () => { req.destroy(); reject(new Error('Request timeout')); });
     req.on('error', reject); req.write(p); req.end();
   });
 }
@@ -36,6 +41,7 @@ function postExchange(body) {
     const req = https.request({ hostname: 'api.hyperliquid.xyz', port: 443, path: '/exchange', method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(p) }
     }, res => { let d=''; res.on('data',c=>d+=c); res.on('end',()=>{ try{resolve(JSON.parse(d))}catch(e){reject(new Error(d))} }); });
+    req.setTimeout(HTTP_TIMEOUT, () => { req.destroy(); reject(new Error('Request timeout')); });
     req.on('error', reject); req.write(p); req.end();
   });
 }

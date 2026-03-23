@@ -31,6 +31,8 @@ async function getAssetIndex(coin) {
 }
 
 // --- Info API ---
+const HTTP_TIMEOUT = 15000;
+
 function postInfo(body) {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify(body);
@@ -40,6 +42,7 @@ function postInfo(body) {
     }, res => {
       let d = ''; res.on('data', c => d += c); res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
     });
+    req.setTimeout(HTTP_TIMEOUT, () => { req.destroy(); reject(new Error('Request timeout')); });
     req.on('error', reject); req.write(payload); req.end();
   });
 }
@@ -54,6 +57,7 @@ function postExchange(body) {
     }, res => {
       let d = ''; res.on('data', c => d += c); res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(new Error(d)); } });
     });
+    req.setTimeout(HTTP_TIMEOUT, () => { req.destroy(); reject(new Error('Request timeout')); });
     req.on('error', reject); req.write(payload); req.end();
   });
 }
@@ -166,7 +170,8 @@ async function main() {
   }
 
   // Set isolated margin mode before placing order (Fede 4-Mar-2026)
-  const leverageVal = parseInt(process.argv[process.argv.indexOf('--leverage') + 1]) || 1;
+  const levIdx = process.argv.indexOf('--leverage');
+  const leverageVal = levIdx !== -1 ? (parseInt(process.argv[levIdx + 1]) || 1) : 1;
   const setIsolated = !process.argv.includes('--cross');
   {
     const levAction = {
@@ -201,7 +206,7 @@ async function main() {
     grouping: 'na',
   };
   
-  const nonce = Date.now();
+  const nonce = Date.now() + 1; // +1 to avoid collision with leverage nonce
   console.log('✍️  Signing with EIP-712...');
   const signature = await signL1Action(wallet, action, nonce);
   console.log(`   Signature v=${signature.v}`);

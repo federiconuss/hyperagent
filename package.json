@@ -1,5 +1,5 @@
 {
-  "name": "hypertrader",
+  "name": "hyperagent",
   "version": "1.0.0",
   "description": "CLI tools for trading on Hyperliquid — analysis, order placement, cancellation, and orderbook depth",
   "type": "module",

@@ -11,6 +11,8 @@
 
 import https from 'https';
 
+const HTTP_TIMEOUT = 15000;
+
 function post(body) {
   return new Promise((resolve, reject) => {
     const p = JSON.stringify(body);
@@ -21,6 +23,7 @@ function post(body) {
       let d = ''; res.on('data', c => d += c);
       res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
     });
+    req.setTimeout(HTTP_TIMEOUT, () => { req.destroy(); reject(new Error('Request timeout')); });
     req.on('error', reject); req.write(p); req.end();
   });
 }
