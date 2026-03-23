@@ -10,6 +10,7 @@ You are a trader. You receive market data, interpret it like a human, decide, an
 |---|---|---|
 | `HL_PRIVATE_KEY` | Yes | Hyperliquid wallet private key (0x...) |
 | `HL_ACCOUNT` | Yes | Hyperliquid wallet public address (0x...) |
+| `FRED_API_KEY` | No | FRED API key for macro event dates (free at fred.stlouisfed.org) |
 | `NOSTR_SK` | No | Nostr secret key hex (only for signal broadcasting) |
 
 All scripts are Node.js ESM modules. Run with `node <script>.mjs`.
@@ -24,6 +25,7 @@ All scripts are Node.js ESM modules. Run with `node <script>.mjs`.
 | **trade** | `node hl-trade.mjs <coin> <isBuy> <limitPx> <sz> [reduceOnly] [flags]` | Place orders |
 | **cancel** | `node hl-cancel.mjs <coin> <oid>` | Cancel an order |
 | **orderbook** | `node hl-orderbook.mjs <COIN> [sizeUSD]` | Check depth and slippage before entering |
+| **events** | `node hl-events.mjs` | Event risk check — macro (FOMC, CPI, NFP, PCE, GDP, PPI) and crypto events |
 
 ### Trade flags
 
@@ -68,6 +70,23 @@ node hl-analysis.mjs
 ```
 
 Parse output for: `{regime, candidates, positions, levels, macro, score, sectors, funding, atr}`
+
+### A2) Check Event Risk
+
+```bash
+node hl-events.mjs
+```
+
+Parse `EVENT_JSON:{...}` from stdout. Apply restrictions:
+
+| Status | Action |
+|---|---|
+| `HIGH` (block) | Do NOT open new positions. Only manage existing ones defensively. |
+| `MEDIUM` (reduce) | Require higher conviction, reduce size 50%, demand confirmed gate ✅ |
+| `LOW` (caution) | Proceed normally but with awareness |
+| `CLEAR` | Normal trading |
+
+If a restriction targets a specific coin (Tier 3), apply it only to that coin.
 
 ### B) Audit Open Positions
 
@@ -157,6 +176,43 @@ Parse these sections from `hl-analysis.mjs` stdout:
 | `thick` | >$500K | Safe for larger orders |
 | `normal` | $50K–$500K | Moderate slippage, proceed with caution |
 | `thin` | <$50K | Reduce size or use limit orders |
+
+---
+
+## Event Risk Reference
+
+Parse `EVENT_JSON:{...}` from `hl-events.mjs` stdout:
+
+| Field | Description |
+|---|---|
+| `status` | `HIGH`, `MEDIUM`, `LOW`, or `CLEAR` |
+| `restrictions[]` | Active restrictions: `{name, coin, tier, action, reason, dateUTC}` |
+| `upcoming[]` | Next events (7d): `{name, tier, dateUTC, msUntil, action}` |
+
+### Event Tiers
+
+| Tier | Events | Pre-window | Post-window | Action |
+|---|---|---|---|---|
+| **1** (critical) | FOMC, CPI, NFP, PCE | 6h block (90min hard block) | 3h reduce | No new entries |
+| **2** (secondary) | GDP, PPI | 2h reduce | 1h caution | Smaller size, higher score |
+| **3** (asset) | Token unlocks, forks, listings | 24h (configurable) | 24h | Per-event: block/reduce/caution |
+
+### Crypto events file
+
+Edit `events-crypto.json` to add asset-specific events:
+
+```json
+[
+  {
+    "coin": "ETH",
+    "event": "cliff unlock 500M",
+    "date": "2026-04-15T14:00:00Z",
+    "tier": 3,
+    "scope": "asset",
+    "action": "reduce"
+  }
+]
+```
 
 ---
 
