@@ -102,7 +102,7 @@ Check that ALL open positions have SL + TP in openOrders.
 
 ### E) Report
 
-Output a summary in Spanish:
+Output a summary in the operator's language:
 - **If action was taken:** max 8 lines
 - **If no action:** max 3 lines
 
