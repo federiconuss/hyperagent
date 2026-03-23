@@ -1,0 +1,19 @@
+{
+  "name": "hypertrader",
+  "version": "1.0.0",
+  "description": "CLI tools for trading on Hyperliquid — analysis, order placement, cancellation, and orderbook depth",
+  "type": "module",
+  "scripts": {
+    "analysis": "node hl-analysis.mjs",
+    "trade": "node hl-trade.mjs",
+    "cancel": "node hl-cancel.mjs",
+    "orderbook": "node hl-orderbook.mjs"
+  },
+  "dependencies": {
+    "ethers": "^6.0.0",
+    "@msgpack/msgpack": "^3.0.0",
+    "nostr-tools": "^2.0.0",
+    "@noble/hashes": "^1.0.0",
+    "ws": "^8.0.0"
+  }
+}

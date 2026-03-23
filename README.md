@@ -1,0 +1,186 @@
+# HyperTrader
+
+CLI toolkit for trading perpetual futures on [Hyperliquid](https://hyperliquid.xyz). Includes multi-timeframe market analysis, order execution, order cancellation, and orderbook depth estimation.
+
+Built to be operated by AI agents or manually from the terminal.
+
+## Features
+
+### `hl-analysis.mjs` — Market Analysis
+
+Full top-down analysis engine that scans all Hyperliquid perps and outputs scored trade opportunities.
+
+**Pipeline:**
+1. **Account state** — balances, open positions, PnL, trailing stop-loss recommendations
+2. **Order verification** — checks that every open position has SL and TP orders active
+3. **BTC Daily (macro)** — regime classification, SMA50/200, EMA20/50, RSI, momentum, Fibonacci, ATR, BTC dominance
+4. **BTC 4h (intermediate)** — directional confirmation, health warnings
+5. **Token scan (Daily → 4h → 1h)** — scores every token with >$5M daily volume across 8 signal categories
+6. **Sizing** — Kelly criterion adjusted by regime, ATR-based risk, and position count
+
+**Regime classification:**
+
+| Regime | Condition | Action |
+|---|---|---|
+| TRENDING_NORMAL | Trending + low vol | Full size |
+| TRENDING_HIGHVOL | Trending + high vol | Small size |
+| RANGING_NORMAL | Ranging + low vol | Mean revert |
+| RANGING_HIGHVOL | Ranging + high vol | Sit out (conditional only) |
+
+**Scoring signals:** daily RSI, daily trend (SMA/EMA/momentum), 4h RSI confirmation, funding rate, overextension, volume confirmation, BTC dominance, macro bias.
+
+**Entry gate:** requires price proximity to a key level (Fibonacci, swing high/low) AND 1h candle rejection at that level before qualifying a trade.
+
+```bash
+node hl-analysis.mjs
+```
+
+### `hl-trade.mjs` — Order Placement
+
+Places limit, IoC (market), trigger (stop-loss/take-profit) orders with EIP-712 signing.
+
+```bash
+# Limit order: BTC long 0.001 @ $60,000
+node hl-trade.mjs BTC true 60000 0.001
+
+# With leverage and isolated margin
+node hl-trade.mjs ETH true 3500 0.1 --leverage 5
+
+# Cross margin
+node hl-trade.mjs SOL true 150 10 --leverage 3 --cross
+
+# IoC (immediate-or-cancel / market)
+node hl-trade.mjs BTC true 65000 0.001 --ioc
+
+# Stop-loss trigger order
+node hl-trade.mjs BTC true 58000 0.001 --trigger 57000 --tpsl sl
+
+# Take-profit trigger order
+node hl-trade.mjs BTC true 70000 0.001 --trigger 72000 --tpsl tp
+
+# Reduce-only (close position)
+node hl-trade.mjs BTC false 65000 0.001 true
+```
+
+**Arguments:**
+
+| Position | Parameter | Description |
+|---|---|---|
+| 1 | `coin` | Asset name (BTC, ETH, SOL...) or numeric index |
+| 2 | `isBuy` | `true` for long, `false` for short |
+| 3 | `limitPx` | Limit price in USD |
+| 4 | `sz` | Size in base asset units |
+| 5 | `reduceOnly` | Optional. `true` to close existing position |
+
+**Flags:**
+
+| Flag | Description |
+|---|---|
+| `--leverage N` | Set leverage (default: 1) |
+| `--cross` | Use cross margin (default: isolated) |
+| `--ioc` | Immediate-or-cancel (market execution) |
+| `--trigger N` | Trigger price for stop/TP orders |
+| `--tpsl <tp\|sl>` | Trigger type: `tp` or `sl` (default: `sl`) |
+
+### `hl-cancel.mjs` — Order Cancellation
+
+```bash
+node hl-cancel.mjs BTC 1234567890
+```
+
+| Position | Parameter | Description |
+|---|---|---|
+| 1 | `coin` | Asset name |
+| 2 | `oid` | Order ID to cancel |
+
+### `hl-orderbook.mjs` — Orderbook Depth & Slippage
+
+Estimates market depth and slippage for a given asset and trade size.
+
+```bash
+# Basic depth check
+node hl-orderbook.mjs SOL
+
+# With size estimate
+node hl-orderbook.mjs ETH 50000
+```
+
+**Output:** mid price, spread, bid/ask depth at 1%, slippage category (thick/normal/thin), estimated slippage percentage.
+
+### `nostr_post.mjs` — Nostr Publisher
+
+Posts a text note (kind 1) to Nostr relays. Useful for broadcasting trade signals.
+
+```bash
+node nostr_post.mjs "BTC long entry at 62k, SL 59k, TP 68k"
+```
+
+## Setup
+
+```bash
+git clone <repo-url>
+cd HyperTrader
+npm install
+```
+
+Create a `.env` file from the template:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your credentials:
+
+```env
+HL_PRIVATE_KEY=0xYourPrivateKeyHere
+HL_ACCOUNT=0xYourWalletAddressHere
+NOSTR_SK=YourNostrSecretKeyHex
+```
+
+Then load the env vars before running any script. You can use [dotenv-cli](https://www.npmjs.com/package/dotenv-cli) or export them manually:
+
+```bash
+# Option A: dotenv-cli
+npx dotenv -- node hl-analysis.mjs
+
+# Option B: export manually
+export HL_PRIVATE_KEY=0x...
+export HL_ACCOUNT=0x...
+node hl-analysis.mjs
+```
+
+## Dependencies
+
+| Package | Purpose |
+|---|---|
+| `ethers` | EIP-712 signing and wallet management |
+| `@msgpack/msgpack` | MessagePack encoding for Hyperliquid L1 actions |
+| `nostr-tools` | Nostr event signing and relay publishing |
+| `@noble/hashes` | Hex-to-bytes conversion for Nostr keys |
+| `ws` | WebSocket client for Nostr relays |
+
+## Architecture
+
+All scripts are standalone Node.js ESM modules that communicate directly with the Hyperliquid API (`api.hyperliquid.xyz`) over HTTPS. No intermediate servers, no SDKs — just raw API calls and local EIP-712 signing.
+
+```
+hl-analysis.mjs    reads    /info API (candles, meta, clearinghouse, orders)
+hl-trade.mjs       signs    EIP-712 → posts to /exchange API
+hl-cancel.mjs      signs    EIP-712 → posts to /exchange API
+hl-orderbook.mjs   reads    /info API (l2Book)
+nostr_post.mjs     signs    Nostr event → publishes to relays
+```
+
+Private keys never leave your machine. Only cryptographic signatures are transmitted.
+
+## Security
+
+- Private keys are loaded exclusively from environment variables
+- No keys, addresses, or secrets are hardcoded in the source
+- `.env` is gitignored — never committed to the repository
+- All signing happens locally via EIP-712; only signatures are sent over the network
+- Scripts are CLI-only with no exposed servers or open ports
+
+## License
+
+MIT
