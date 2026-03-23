@@ -23,7 +23,7 @@ Ask the operator which execution mode to use for this session:
 
 | Mode | Behavior |
 |---|---|
-| **confirm-first** | Analyze and propose trades, but **ask the operator for approval** before executing any order. Default if the operator doesn't choose. |
+| **confirm-first** | Analyze and propose trades, but **ask the operator for approval** before executing any order. Fallback if asked and no mode is chosen. |
 | **auto-execute** | Operate autonomously within hard limits and SKILL rules. Report actions after the fact. No confirmation needed per trade. |
 | **defensive-only** | Only manage existing positions (trail SL, close losers, fix missing SL/TP). **Never open new entries.** |
 
