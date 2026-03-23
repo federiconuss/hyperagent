@@ -1,4 +1,4 @@
-# HyperTrader
+# HyperAgent
 
 CLI toolkit for trading perpetual futures on [Hyperliquid](https://hyperliquid.xyz). Includes multi-timeframe market analysis, order execution, order cancellation, and orderbook depth estimation.
 
@@ -118,8 +118,8 @@ node nostr_post.mjs "BTC long entry at 62k, SL 59k, TP 68k"
 ## Setup
 
 ```bash
-git clone <repo-url>
-cd HyperTrader
+git clone https://github.com/federiconuss/hyperagent.git
+cd hyperagent
 npm install
 ```
 
@@ -183,4 +183,4 @@ Private keys never leave your machine. Only cryptographic signatures are transmi
 
 ## License
 
-MIT
+[MIT](LICENSE)
