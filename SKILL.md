@@ -80,7 +80,11 @@ Check that ALL open positions have SL + TP in openOrders.
 - SL confirmation failed
 - Thesis is dead: support/resistance broke, trend flipped, funding flipped, volume dried up
 
-**Trail SL** using 4h Fibonacci levels. NEVER move SL backwards (further from entry).
+**Trail SL** using 4h Fibonacci levels. To trail, cancel the old SL trigger and place a new one closer to current price.
+
+- **LONG:** SL is below entry. Trail it **upward** (e.g. 60000 → 62000 → 64000). Never move it down.
+- **SHORT:** SL is above entry. Trail it **downward** (e.g. 40000 → 38000 → 36000). Never move it up.
+- **Rule:** NEVER move SL further from current price (away from profit). Only tighten it.
 
 ### D) New Trades
 
@@ -96,8 +100,10 @@ Check that ALL open positions have SL + TP in openOrders.
 1. Check orderbook depth with `node hl-orderbook.mjs <COIN> <sizeUSD>`
 2. Enter with IoC only: `node hl-trade.mjs <coin> <isBuy> <limitPx> <sz> --ioc`
 3. **GTC limit orders are FORBIDDEN for entries**
-4. Immediately place TP trigger: `node hl-trade.mjs <coin> <opposite> <tpPx> <sz> true --trigger <tpPx> --tpsl tp`
-5. Immediately place SL trigger: `node hl-trade.mjs <coin> <opposite> <slPx> <sz> true --trigger <slPx> --tpsl sl`
+4. Immediately place TP trigger (reduce-only, opposite side): `node hl-trade.mjs <coin> <oppositeSide> <tpPx> <sz> true --trigger <tpPx> --tpsl tp`
+5. Immediately place SL trigger (reduce-only, opposite side): `node hl-trade.mjs <coin> <oppositeSide> <slPx> <sz> true --trigger <slPx> --tpsl sl`
+   - **LONG:** `<oppositeSide>` = `false`, SL trigger below entry, TP trigger above entry
+   - **SHORT:** `<oppositeSide>` = `true`, SL trigger above entry, TP trigger below entry
 6. Confirm every order was placed. If SL confirmation fails → close the position
 
 ### E) Report
