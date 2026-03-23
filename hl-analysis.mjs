@@ -219,27 +219,25 @@ function kellyFraction(winRate, avgWinLoss) {
 
 // ─── Trailing SL Recommendation ───
 
-function trailingSLRec(entryPx, currentPx, isLong) {
-  const profit = isLong ? (currentPx - entryPx) : (entryPx - currentPx);
-  const roe = profit / entryPx;
-  const roePct = roe * 100;
+function trailingSLRec(currentPx, isLong, allLevels) {
+  if (!allLevels || allLevels.length < 3) return null;
 
-  if (roePct < 5) return null; // no trailing yet
+  // Sort levels ascending by price
+  const sorted = [...allLevels].filter(l => l.px > 0).sort((a, b) => a.px - b.px);
 
-  let slPrice;
-  let label;
-  if (roePct >= 15) {
-    // SL at 75% of profit
-    slPrice = isLong ? entryPx + profit * 0.75 : entryPx - profit * 0.75;
-    label = 'Trail 75% profit';
-  } else if (roePct >= 10) {
-    slPrice = isLong ? entryPx + profit * 0.50 : entryPx - profit * 0.50;
-    label = 'Trail 50% profit';
+  if (isLong) {
+    // For longs: find the highest level still below current price, then go 2 back
+    const below = sorted.filter(l => l.px < currentPx);
+    if (below.length < 2) return null;
+    const target = below[below.length - 2]; // 2 levels below price
+    return { slPrice: target.px, label: `Trail → ${target.label} (2 levels below)` };
   } else {
-    slPrice = entryPx;
-    label = 'Breakeven';
+    // For shorts: find the lowest level still above current price, then go 2 back
+    const above = sorted.filter(l => l.px > currentPx);
+    if (above.length < 2) return null;
+    const target = above[1]; // 2 levels above price
+    return { slPrice: target.px, label: `Trail → ${target.label} (2 levels above)` };
   }
-  return { slPrice, label, roePct };
 }
 
 // ─── Regime Classification (on DAILY data) ───
@@ -289,10 +287,31 @@ async function main() {
 
       let posLine = `${p.coin}: ${isLong ? 'LONG' : 'SHORT'} ${p.szi} @ ${p.entryPx} | PnL: ${pnlPct}% | Value: $${parseFloat(p.positionValue).toFixed(2)}`;
 
-      // Trailing SL recommendation
-      const slRec = trailingSLRec(entryPx, currentPx, isLong);
-      if (slRec) {
-        posLine += `\n  📍 SL Rec: ${slRec.label} → $${slRec.slPrice.toPrecision(6)} (ROE: ${slRec.roePct.toFixed(1)}%)`;
+      // Fetch 4h candles for this position's coin to build fib levels
+      try {
+        const h4 = await post({ type: 'candleSnapshot', req: { coin: p.coin, interval: '4h', startTime: now - 7 * 86400000, endTime: now } });
+        if (h4.length >= 10) {
+          const h4Closes = h4.map(x => parseFloat(x.c));
+          const h4Swing = findSwing(h4Closes, 42);
+          const posLevels = [];
+          if (h4Swing) {
+            const fib = calcFibLevels(h4Swing.swingLow, h4Swing.swingHigh, h4Swing.isUptrend);
+            posLevels.push(
+              { px: fib.ret_236, label: 'fib_236' },
+              { px: fib.ret_382, label: 'fib_382' },
+              { px: fib.ret_500, label: 'fib_500' },
+              { px: fib.ret_618, label: 'fib_618' },
+              { px: h4Swing.swingLow, label: 'h4_swing_low' },
+              { px: h4Swing.swingHigh, label: 'h4_swing_high' },
+            );
+          }
+          const slRec = trailingSLRec(currentPx, isLong, posLevels);
+          if (slRec) {
+            posLine += `\n  📍 SL Rec: ${slRec.label} → $${slRec.slPrice.toPrecision(6)}`;
+          }
+        }
+      } catch (e) {
+        console.error(`  ⚠️ Could not compute trailing SL for ${p.coin}: ${e.message}`);
       }
 
       console.log(posLine);
