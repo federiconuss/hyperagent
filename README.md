@@ -13,9 +13,14 @@ HyperAgent is an **assisted decision stack**, not a fully autonomous bot. The sc
 
 **Recommended model:** Claude Opus 4.6 — best results in reasoning, risk management, and trade execution consistency.
 
-### Execution Modes
+### Session Init
 
-When the agent starts a session, it asks the operator to choose an execution mode:
+When the agent loads the skill, it runs a startup checklist:
+
+1. **FRED API Key check** — verifies if `FRED_API_KEY` is configured. If not, offers the free registration link ([fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/api_key.html)). The system works without it, but macro event coverage is limited to hardcoded FOMC dates.
+2. **Execution mode selection** — asks the operator to choose how the agent should operate.
+
+### Execution Modes
 
 | Mode | Behavior |
 |---|---|
