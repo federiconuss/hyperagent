@@ -76,6 +76,7 @@ async function getBTCDominance() {
     const data = await httpGet('https://api.coincap.io/v2/assets/bitcoin');
     if (data?.data?.marketCapDominance) return parseFloat(data.data.marketCapDominance);
   } catch(e) {}
+  console.error('⚠️ BTC dominance unavailable (CoinGecko + CoinCap both failed) — macro scoring incomplete');
   return null;
 }
 
