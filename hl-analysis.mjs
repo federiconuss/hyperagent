@@ -40,6 +40,8 @@ const SECTOR_MAP = {
 
 // ─── HTTP helpers ───
 
+const HTTP_TIMEOUT = 15000;
+
 function post(body) {
   return new Promise((resolve, reject) => {
     const p = JSON.stringify(body);
@@ -50,6 +52,7 @@ function post(body) {
       let d = ''; res.on('data', c => d += c);
       res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
     });
+    req.setTimeout(HTTP_TIMEOUT, () => { req.destroy(); reject(new Error('Request timeout')); });
     req.on('error', reject); req.write(p); req.end();
   });
 }
@@ -258,6 +261,7 @@ async function main() {
   // ━━━ 1. ACCOUNT STATE ━━━
   const state = await post({ type: 'clearinghouseState', user: ACCOUNT });
   const spot = await post({ type: 'spotClearinghouseState', user: ACCOUNT });
+  if (!spot || !spot.balances) throw new Error('Could not fetch spot balance. Check HL_ACCOUNT.');
   const usdc = spot.balances.find(b => b.coin === 'USDC');
   const totalBalance = parseFloat(usdc?.total || '0');
   const hold = parseFloat(usdc?.hold || '0');
@@ -515,8 +519,11 @@ async function main() {
 
   const scored = [];
 
+  const delay = (ms) => new Promise(r => setTimeout(r, ms));
+
   for (const c of candidates) {
     try {
+      await delay(50); // rate limit: 50ms between tokens
       // ── Daily candles ──
       const daily = await post({ type: 'candleSnapshot', req: { coin: c.name, interval: '1d', startTime: now - 90 * 86400000, endTime: now } });
       if (daily.length < 20) continue;
@@ -733,7 +740,7 @@ async function main() {
         rejectionTolerance: rejectionTolerance.toFixed(2),
         allLevels: allLevels.filter(l => l.px > 0).map(l => ({ label: l.label, px: +l.px.toPrecision(6) })),
       });
-    } catch (e) { /* skip */ }
+    } catch (e) { console.error(`⚠️ Skipped ${c.name}: ${e.message}`); }
   }
 
   scored.sort((a, b) => Math.abs(b.score) - Math.abs(a.score));

@@ -24,10 +24,18 @@ const event = finalizeEvent({
 const relays = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.nostr.band'];
 let published = 0;
 
+const RELAY_TIMEOUT = 10000;
+
 for (const url of relays) {
   try {
-    const relay = await Relay.connect(url);
-    await relay.publish(event);
+    const relay = await Promise.race([
+      Relay.connect(url),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), RELAY_TIMEOUT))
+    ]);
+    await Promise.race([
+      relay.publish(event),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Publish timeout')), RELAY_TIMEOUT))
+    ]);
     console.log(`✅ Published to ${url}`);
     published++;
     relay.close();
