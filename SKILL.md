@@ -144,12 +144,12 @@ Check that ALL open positions have SL + TP in openOrders.
 
 ### D) New Trades
 
-**Size by conviction:**
+**Default position size: 5% of bankroll.** The agent may adjust based on conviction:
 
 | Conviction | Size |
 |---|---|
-| High | 10–15% of bankroll |
-| Medium | 5–10% of bankroll |
+| High | Up to 10% of bankroll |
+| Medium | 5% of bankroll (default) |
 | Low | Don't trade |
 
 **Entry procedure (strict order):**
