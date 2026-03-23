@@ -175,9 +175,11 @@ Edit `.env` with your credentials:
 ```env
 HL_PRIVATE_KEY=0xYourPrivateKeyHere
 HL_ACCOUNT=0xYourWalletAddressHere
-FRED_API_KEY=YourFREDApiKey        # free at fred.stlouisfed.org
+FRED_API_KEY=YourFREDApiKey        # optional, see below
 NOSTR_SK=YourNostrSecretKeyHex     # optional
 ```
+
+**FRED API key (optional, for `hl-events.mjs`):** Register for free at [fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/api_key.html) — it's a US government service, 100% free, no trial, no credit card. Without it, `hl-events.mjs` still works with hardcoded FOMC dates and crypto events.
 
 Then load the env vars before running any script. You can use [dotenv-cli](https://www.npmjs.com/package/dotenv-cli) or export them manually:
 
