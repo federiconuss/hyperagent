@@ -80,13 +80,13 @@ Check that ALL open positions have SL + TP in openOrders.
 - SL confirmation failed
 - Thesis is dead: support/resistance broke, trend flipped, funding flipped, volume dried up
 
-**Trail SL** on two profit levels. To trail, cancel the old SL trigger and place a new one:
+**Trail SL** using 4h Fibonacci levels — always keep SL **2 levels behind** the current price. To trail, cancel the old SL trigger and place a new one:
 
-- **Level 1 — Breakeven:** when unrealized profit ≥ 50% of TP distance, move SL to entry price.
-- **Level 2 — Lock profit:** when unrealized profit ≥ 75% of TP distance, move SL to 50% of TP.
-- **LONG:** SL moves **upward** only (e.g. 60000 → 62000 → 64000). Never move it down.
-- **SHORT:** SL moves **downward** only (e.g. 40000 → 38000 → 36000). Never move it up.
-- **Rule:** NEVER move SL further from current price (away from profit). Only tighten it.
+- `cmdA` outputs `📍 SL Rec` with the recommended level for each open position.
+- **LONG:** SL sits 2 fib/swing levels **below** price. As price climbs past a level, move SL up to maintain the 2-level gap. Never move it down.
+- **SHORT:** SL sits 2 fib/swing levels **above** price. As price drops past a level, move SL down to maintain the 2-level gap. Never move it up.
+- **Levels used** (sorted by price): `h4_swing_low`, `fib_618`, `fib_500`, `fib_382`, `fib_236`, `h4_swing_high`.
+- **Rule:** NEVER move SL further from current price. Only tighten it.
 
 ### D) New Trades
 
