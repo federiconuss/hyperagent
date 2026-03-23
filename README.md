@@ -1,5 +1,8 @@
 # HyperAgent
 
+[![GitHub release](https://img.shields.io/github/v/release/federiconuss/hyperagent)](https://github.com/federiconuss/hyperagent/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 CLI toolkit for trading perpetual futures on [Hyperliquid](https://hyperliquid.xyz). Includes multi-timeframe market analysis, order execution, order cancellation, and orderbook depth estimation.
 
 Built to be operated by AI agents or manually from the terminal.
