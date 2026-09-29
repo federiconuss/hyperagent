@@ -1,22 +1,47 @@
 ---
 name: hyperagent
-description: Connect to Hyperliquid through the HyperAgent CLI to read account and market data and submit specified spot or perpetual orders and cancellations. Use for Hyperliquid API operations, not trading strategy or autonomous portfolio management.
+description: Set up and use HyperAgent to connect an agent to Hyperliquid, read account and market data, and submit specified spot or perpetual orders and cancellations. Use for Hyperliquid API operations, not trading strategy or autonomous portfolio management.
 ---
 
-# HyperAgent tool reference
+# HyperAgent
 
 HyperAgent exposes individual Hyperliquid API operations. It provides no strategy, trading persona, execution schedule, risk policy, or autonomous decision loop. Use the operation and parameters authorized by the caller; this reference grants no additional authority.
 
+## Set up the tools
+
+When the caller gives you this file or its URL and asks to connect to Hyperliquid, handle the setup in your execution environment. The caller does not need to clone the repository or install dependencies manually. This file describes the tools; the executable scripts come from [the HyperAgent repository](https://github.com/federiconuss/hyperagent).
+
+You need a terminal, a writable workspace, and network access to GitHub, the npm registry, and Hyperliquid. A chat-only environment cannot run this connector. If execution tools are unavailable, explain the missing capability without claiming a connection was established.
+
+1. Check `node --version`, `npm --version`, and `git --version`. Reuse an available Node.js 22+ runtime. If Node or npm is missing or incompatible, prepare a compatible runtime with the environment's supported installation tools and permissions; keep changes scoped to the task where possible. Report a blocker only if the environment cannot provide it.
+2. Reuse a compatible v2 checkout containing `package.json`, `hl-markets.mjs`, and `lib/`. If you received only this Markdown file or a URL, obtain the complete released toolset in your workspace. For a new directory:
+
+   ```bash
+   git clone --branch v2.0.0 --depth 1 https://github.com/federiconuss/hyperagent.git hyperagent
+   cd hyperagent
+   ```
+
+   Choose an unused destination if `hyperagent` already exists; preserve existing work and configuration. If Git is unavailable, download and extract the [v2.0.0 source archive](https://github.com/federiconuss/hyperagent/archive/refs/tags/v2.0.0.tar.gz) instead.
+3. From the repository root, run `npm ci --ignore-scripts`, then `node hl-markets.mjs --help` to verify the local command. An existing installation can be reused when it matches the lockfile.
+4. Verify API access with a public market-data query on the caller's selected network. If none is specified for a setup-only request, use testnet:
+
+   ```bash
+   HL_NETWORK=testnet node hl-markets.mjs --market perp
+   ```
+
+   This example uses POSIX shell syntax; set `HL_NETWORK` using the equivalent mechanism in other shells. Setup requires no account address, `.env` file, signing key, or live order. Confirm that the query succeeds and returns market metadata as JSON before reporting a working connection.
+5. Report the tool location, selected network, and whether the read succeeded. Continue with the requested operation when setup is part of that task; a setup-only request ends after verification.
+
 ## Runtime and configuration
 
-Run from the repository root with Node.js 22 or later after `npm ci`. Use `node --env-file=.env <script>.mjs ...` to load an environment file explicitly. Commands do not load `.env` themselves. Use `--help` for the current argument contract.
+Run commands from the prepared repository root. Use `node --env-file=.env <script>.mjs ...` when an environment file is configured. Commands do not load `.env` themselves. Use `--help` for the current argument contract.
 
 - `HL_NETWORK`: `mainnet` or `testnet`; defaults to mainnet. The example environment file selects testnet.
 - `HL_ACCOUNT`: actual trading account address for account queries, not the API wallet's signer address. Query address precedence is `--user ADDRESS`, then `HL_VAULT_ADDRESS`, then `HL_ACCOUNT`.
 - `HL_PRIVATE_KEY`: signing key for live exchange actions; prefer an approved API wallet. Public reads and dry runs need no private key.
 - `HL_VAULT_ADDRESS`: optional target vault or subaccount for exchange actions and account queries.
 
-Read [README.md](README.md) for configuration details and examples. Never include a private key in a command argument or output.
+Read the repository's `README.md` for configuration details and examples, or use the [online runtime documentation](https://github.com/federiconuss/hyperagent/blob/v2.0.0/README.md) if only this file is available. When persistent configuration is needed, create `.env` from `.env.example` only if no `.env` already exists. Use the environment's secret configuration for signing keys; do not ask the caller to paste a private key into chat. Never include a private key in a command argument or output.
 
 `HL_ACCOUNT` only affects reads. Ordinary exchange actions target the signer's account or the account that approved the API wallet; `HL_VAULT_ADDRESS` selects a vault or subaccount target.
 

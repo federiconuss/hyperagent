@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Make sharing `SKILL.md` with an agent the primary setup flow.
+- Add agent setup instructions for obtaining the released CLI, preparing its runtime, and verifying public API access without credentials.
+- Keep manual CLI installation as an alternative and clarify the execution capabilities required by the agent.
+
 ## 2.0.0 — 2026-09-29
 
 HyperAgent becomes a neutral Hyperliquid CLI connector. This is a breaking change from the strategy-oriented v1 toolkit.

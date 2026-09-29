@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-339933.svg)](https://nodejs.org/)
 
-A lightweight command-line connector to [Hyperliquid](https://hyperliquid.xyz) for AI agents, applications, and terminal users.
+A skill for connecting AI agents to [Hyperliquid](https://hyperliquid.xyz), backed by lightweight command-line tools that applications and terminal users can also use.
 
 Read account and market data, inspect order books, and submit explicitly specified spot and perpetual orders. Commands return JSON and connect directly to Hyperliquid's public API. HyperAgent contains no trading strategy, model runtime, autonomous execution loop, or position-sizing policy.
 
@@ -17,7 +17,21 @@ Read account and market data, inspect order books, and submit explicitly specifi
 
 ## Quick start
 
-Requires **Node.js 22 or later** and npm.
+Give your agent [SKILL.md](https://github.com/federiconuss/hyperagent/blob/master/SKILL.md), either as a file or a link, and ask it to prepare the tools:
+
+```text
+Read https://raw.githubusercontent.com/federiconuss/hyperagent/master/SKILL.md
+Set up HyperAgent in your environment and verify the connection by reading
+public perpetual-market data on Hyperliquid testnet.
+```
+
+The agent follows the skill to obtain the released scripts, prepare dependencies, and verify API access. It needs terminal access, a writable workspace, and internet access. **Node.js 22+ and npm run in the agent's environment**; the agent handles setup using that environment's available tools and permissions. Sending the file to a chat-only assistant does not provide execution tools.
+
+Public market data requires no account or private key. For account queries, provide the trading account's public address. For live order execution, configure a signer through the agent environment's secret settings; keep private keys out of chat.
+
+### Manual CLI setup
+
+For direct terminal use, install **Node.js 22 or later** and npm, then run:
 
 ```bash
 git clone https://github.com/federiconuss/hyperagent.git
@@ -139,7 +153,9 @@ Leverage and margin settings are unchanged unless explicitly requested. A levera
 
 ## Use with an AI agent
 
-Give your agent access to the CLI and the [tool reference in `SKILL.md`](SKILL.md). The calling application controls which commands the agent may run and supplies any trading decisions or authorization policy. Loading the reference does not start a process or grant permission to trade.
+Start with [SKILL.md](https://github.com/federiconuss/hyperagent/blob/master/SKILL.md). It includes setup instructions so the agent can prepare the CLI when the repository is not already available. For runtimes that install skills as folders, keep the full repository together so the skill and its scripts remain available.
+
+The calling application controls which commands the agent may run and supplies any trading decisions or authorization policy. Preparing the tools is separate from running exchange actions; loading the skill does not grant permission to trade.
 
 **Recommended optional model:** [Claude Opus 5.5](https://www.anthropic.com/claude/opus) (`claude-opus-5-5`). Choose it in your agent runtime; HyperAgent is model-independent and does not call an LLM API or require an LLM API key.
 
