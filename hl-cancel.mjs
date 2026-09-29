@@ -1,85 +1,27 @@
 #!/usr/bin/env node
-/**
- * Cancel order on Hyperliquid
- * Usage: node hl-cancel.mjs <coin> <oid>
- */
-import { ethers } from 'ethers';
-import { encode } from '@msgpack/msgpack';
-import https from 'https';
+import { clientFromEnv, createClient, assertExchangeSuccess } from './lib/hyperliquid.mjs';
+import { resolveMarket } from './lib/markets.mjs';
+import { parseCli, runCli } from './lib/execution-cli.mjs';
 
-if (!process.env.HL_PRIVATE_KEY) {
-  console.error('Missing env var. Set HL_PRIVATE_KEY (see .env.example)');
-  process.exit(1);
-}
+const usage = 'node hl-cancel.mjs <coin> <oid> [--market perp|spot] [--dex name] [--dry-run]';
 
-const PRIVATE_KEY = process.env.HL_PRIVATE_KEY;
-const IS_MAINNET = true;
-
-async function getAssetIndex(coin) {
-  const data = await postInfo({ type: 'meta' });
-  const idx = data.universe.findIndex(u => u.name === coin);
-  if (idx === -1) throw new Error(`Asset ${coin} not found. Use exact Hyperliquid name (e.g. BTC, ETH, SOL)`);
-  return idx;
-}
-
-const HTTP_TIMEOUT = 15000;
-
-function postInfo(body) {
-  return new Promise((resolve, reject) => {
-    const p = JSON.stringify(body);
-    const req = https.request({ hostname: 'api.hyperliquid.xyz', port: 443, path: '/info', method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(p) }
-    }, res => { let d=''; res.on('data',c=>d+=c); res.on('end',()=>resolve(JSON.parse(d))); });
-    req.setTimeout(HTTP_TIMEOUT, () => { req.destroy(); reject(new Error('Request timeout')); });
-    req.on('error', reject); req.write(p); req.end();
+export async function main(args, { client, env = process.env } = {}) {
+  const { values, positionals } = parseCli(args, {
+    market: { type: 'string', default: 'perp' }, dex: { type: 'string', default: '' },
+    'dry-run': { type: 'boolean' }, help: { type: 'boolean' },
   });
+  if (values.help) return { usage };
+  if (positionals.length !== 2) throw new Error(usage);
+  const [coin, id] = positionals;
+  const oid = Number(id);
+  if (!/^\d+$/.test(id) || !Number.isSafeInteger(oid) || oid < 1) throw new Error('Order ID must be a positive safe integer');
+  client ??= values['dry-run']
+    ? createClient({ network: env.HL_NETWORK || 'mainnet', vaultAddress: env.HL_VAULT_ADDRESS || undefined })
+    : clientFromEnv(env);
+  const market = await resolveMarket(client, coin, { market: values.market, dex: values.dex });
+  const action = { type: 'cancel', cancels: [{ a: market.asset, o: oid }] };
+  if (values['dry-run']) return { dryRun: true, network: client.network, vaultAddress: client.vaultAddress ?? null, market, action };
+  return { network: client.network, vaultAddress: client.vaultAddress ?? null, market, response: assertExchangeSuccess(await client.exchange(action)) };
 }
 
-function postExchange(body) {
-  return new Promise((resolve, reject) => {
-    const p = JSON.stringify(body);
-    const req = https.request({ hostname: 'api.hyperliquid.xyz', port: 443, path: '/exchange', method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(p) }
-    }, res => { let d=''; res.on('data',c=>d+=c); res.on('end',()=>{ try{resolve(JSON.parse(d))}catch(e){reject(new Error(d))} }); });
-    req.setTimeout(HTTP_TIMEOUT, () => { req.destroy(); reject(new Error('Request timeout')); });
-    req.on('error', reject); req.write(p); req.end();
-  });
-}
-
-function actionHash(action, vaultAddress, nonce) {
-  const packed = encode(action);
-  const nonceBuf = Buffer.alloc(8);
-  nonceBuf.writeBigUInt64BE(BigInt(nonce));
-  const combined = Buffer.concat([Buffer.from(packed), nonceBuf, Buffer.from([0x00])]);
-  return ethers.keccak256(combined);
-}
-
-async function signL1Action(wallet, action, nonce) {
-  const hash = actionHash(action, null, nonce);
-  const phantomAgent = { source: IS_MAINNET ? 'a' : 'b', connectionId: hash };
-  const domain = { chainId: 1337, name: 'Exchange', verifyingContract: '0x0000000000000000000000000000000000000000', version: '1' };
-  const types = { Agent: [{ name: 'source', type: 'string' }, { name: 'connectionId', type: 'bytes32' }] };
-  const sig = await wallet.signTypedData(domain, types, phantomAgent);
-  return { r: '0x' + sig.slice(2, 66), s: '0x' + sig.slice(66, 130), v: parseInt(sig.slice(130, 132), 16) };
-}
-
-async function main() {
-  const coin = process.argv[2] || 'BTC';
-  const oid = parseInt(process.argv[3]);
-  if (!oid) { console.error('Usage: node hl-cancel.mjs <coin> <oid>'); process.exit(1); }
-  
-  const assetIndex = await getAssetIndex(coin);
-  const wallet = new ethers.Wallet(PRIVATE_KEY);
-  const action = { type: 'cancel', cancels: [{ a: assetIndex, o: oid }] };
-  const nonce = Date.now();
-  const signature = await signL1Action(wallet, action, nonce);
-  
-  console.log(`🗑️ Cancelling oid=${oid} for ${coin}...`);
-  const response = await postExchange({ action, nonce, signature, vaultAddress: null });
-  console.log(JSON.stringify(response, null, 2));
-  
-  if (response.status === 'ok') console.log('✅ Cancelled');
-  else console.log('❌ Failed');
-}
-
-main().catch(e => { console.error('❌', e.message); process.exit(1); });
+runCli(import.meta.url, main);

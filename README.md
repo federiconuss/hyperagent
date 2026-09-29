@@ -1,248 +1,177 @@
 # HyperAgent
 
-[![GitHub release](https://img.shields.io/github/v/release/federiconuss/hyperagent)](https://github.com/federiconuss/hyperagent/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-339933.svg)](https://nodejs.org/)
 
-CLI toolkit for trading perpetual futures on [Hyperliquid](https://hyperliquid.xyz). Includes multi-timeframe market analysis, order execution, order cancellation, and orderbook depth estimation.
+A lightweight command-line connector to [Hyperliquid](https://hyperliquid.xyz) for AI agents, applications, and terminal users.
 
-Built to be operated by AI agents or manually from the terminal.
-
-### How it works
-
-HyperAgent is an **assisted decision stack**, not a fully autonomous bot. The scripts are deterministic tools that produce signals, scores, levels, and sizing suggestions. The **agent** (or human) is the decision layer on top — it interprets the data, applies judgment, and executes trades. See [`SKILL.md`](SKILL.md) for the full agent operating protocol.
-
-**Recommended model:** Claude Opus 4.6 — best results in reasoning, risk management, and trade execution consistency.
-
-### Session Init
-
-When the agent loads the skill, it runs a startup checklist:
-
-1. **FRED API Key check** — verifies if `FRED_API_KEY` is configured. If not, offers the free registration link ([fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/api_key.html)). The system works without it, but macro event coverage is limited to hardcoded FOMC dates.
-2. **Execution mode selection** — asks the operator to choose how the agent should operate.
-
-### Execution Modes
-
-| Mode | Behavior |
-|---|---|
-| **confirm-first** | Analyzes and proposes trades, but waits for operator approval before executing. Fallback if asked and no mode is chosen. |
-| **auto-execute** | Operates autonomously within hard limits and risk rules. Reports actions after execution. |
-| **defensive-only** | Only manages existing positions (trail SL, close losers, fix missing orders). Never opens new entries. |
-
-Hard limits (max exposure, max positions, SL/TP, drawdown pauses) apply in **all modes** — they are non-negotiable.
+Read account and market data, inspect order books, and submit explicitly specified spot and perpetual orders. Commands return JSON and connect directly to Hyperliquid's public API. HyperAgent contains no trading strategy, model runtime, autonomous execution loop, or position-sizing policy.
 
 ## Features
 
-### `hl-analysis.mjs` — Market Analysis
+- Read-only access to the `/info` API, with account and market discovery commands.
+- Account reporting that distinguishes unified accounts, portfolio margin, and standard accounts.
+- Spot, validator-operated perpetuals, and builder-deployed perpetual markets.
+- Limit, immediate-or-cancel, post-only, and trigger orders; order cancellation.
+- Mainnet and testnet, local signing, and dry runs for exchange actions.
 
-Full top-down analysis engine that scans all Hyperliquid perps and outputs scored trade opportunities.
+## Quick start
 
-**Pipeline:**
-1. **Account state** — balances, open positions, PnL, trailing stop-loss recommendations
-2. **Order verification** — checks that every open position has SL and TP orders active
-3. **BTC Daily (macro)** — regime classification, SMA50/200, EMA20/50, RSI, momentum, Fibonacci, ATR, BTC dominance
-4. **BTC 4h (intermediate)** — directional confirmation, health warnings
-5. **Token scan (Daily → 4h → 1h)** — scores every token with >$5M daily volume across 8 signal categories
-6. **Sizing** — Kelly criterion adjusted by regime, ATR-based risk, and position count
-
-**Regime classification:**
-
-| Regime | Condition | Action |
-|---|---|---|
-| TRENDING_NORMAL | Trending + low vol | Full size |
-| TRENDING_HIGHVOL | Trending + high vol | Small size |
-| RANGING_NORMAL | Ranging + low vol | Mean revert |
-| RANGING_HIGHVOL | Ranging + high vol | Sit out (conditional only) |
-
-**Scoring signals:** daily RSI, daily trend (SMA/EMA/momentum), 4h RSI confirmation, funding rate, overextension, volume confirmation, BTC dominance, macro bias.
-
-**Entry gate:** requires price proximity to a key level (Fibonacci, swing high/low) AND 1h candle rejection at that level before qualifying a trade.
-
-```bash
-node hl-analysis.mjs
-```
-
-### `hl-trade.mjs` — Order Placement
-
-Places limit, IoC (market), trigger (stop-loss/take-profit) orders with EIP-712 signing.
-
-```bash
-# Limit order: BTC long 0.001 @ $60,000
-node hl-trade.mjs BTC true 60000 0.001
-
-# With leverage and isolated margin
-node hl-trade.mjs ETH true 3500 0.1 --leverage 5
-
-# Cross margin
-node hl-trade.mjs SOL true 150 10 --leverage 3 --cross
-
-# IoC (immediate-or-cancel / market)
-node hl-trade.mjs BTC true 65000 0.001 --ioc
-
-# Stop-loss trigger order
-node hl-trade.mjs BTC true 58000 0.001 --trigger 57000 --tpsl sl
-
-# Take-profit trigger order
-node hl-trade.mjs BTC true 70000 0.001 --trigger 72000 --tpsl tp
-
-# Reduce-only (close position)
-node hl-trade.mjs BTC false 65000 0.001 true
-```
-
-**Arguments:**
-
-| Position | Parameter | Description |
-|---|---|---|
-| 1 | `coin` | Asset name (BTC, ETH, SOL...) or numeric index |
-| 2 | `isBuy` | `true` for long, `false` for short |
-| 3 | `limitPx` | Limit price in USD |
-| 4 | `sz` | Size in base asset units |
-| 5 | `reduceOnly` | Optional. `true` to close existing position |
-
-**Flags:**
-
-| Flag | Description |
-|---|---|
-| `--leverage N` | Set leverage (default: 1) |
-| `--cross` | Use cross margin (default: isolated) |
-| `--ioc` | Immediate-or-cancel (market execution) |
-| `--trigger N` | Trigger price for stop/TP orders |
-| `--tpsl <tp\|sl>` | Trigger type: `tp` or `sl` (default: `sl`) |
-
-### `hl-cancel.mjs` — Order Cancellation
-
-```bash
-node hl-cancel.mjs BTC 1234567890
-```
-
-| Position | Parameter | Description |
-|---|---|---|
-| 1 | `coin` | Asset name |
-| 2 | `oid` | Order ID to cancel |
-
-### `hl-orderbook.mjs` — Orderbook Depth & Slippage
-
-Estimates market depth and slippage for a given asset and trade size.
-
-```bash
-# Basic depth check
-node hl-orderbook.mjs SOL
-
-# With size estimate
-node hl-orderbook.mjs ETH 50000
-```
-
-**Output:** mid price, spread, bid/ask depth at 1%, slippage category (thick/normal/thin), estimated slippage percentage.
-
-### `hl-events.mjs` — Event Risk Layer
-
-Checks upcoming macro and crypto events, applies time-window rules, and outputs restrictions.
-
-**Data sources (100% free, no trials):**
-- **FRED API** (St. Louis Fed) — CPI, NFP, PCE, GDP, PPI release dates
-- **FOMC 2026 dates** — hardcoded from federalreserve.gov
-- **`events-crypto.json`** — manually maintained crypto events (unlocks, forks, listings)
-
-```bash
-node hl-events.mjs
-```
-
-**Output:**
-```
-=== EVENT RISK ===
-Status: HIGH
-Next: CPI in 4h 12m (Tier 1 — block)
-Active restrictions:
-  - BLOCK: CPI in 4h 12m
-```
-
-**Event tiers:**
-
-| Tier | Events | Rule |
-|---|---|---|
-| 1 (critical) | FOMC, CPI, NFP, PCE | Block entries 6h before, reduce 3h after |
-| 2 (secondary) | GDP, PPI | Reduce size 2h before, caution 1h after |
-| 3 (asset) | Token unlocks, forks, listings | Per-event action from `events-crypto.json` |
-
-Outputs a `EVENT_JSON:{...}` line for machine parsing by the agent.
-
-### `nostr_post.mjs` — Nostr Publisher
-
-Posts a text note (kind 1) to Nostr relays. Useful for broadcasting trade signals.
-
-```bash
-node nostr_post.mjs "BTC long entry at 62k, SL 59k, TP 68k"
-```
-
-## Setup
+Requires **Node.js 22 or later** and npm.
 
 ```bash
 git clone https://github.com/federiconuss/hyperagent.git
 cd hyperagent
-npm install
-```
-
-Create a `.env` file from the template:
-
-```bash
+npm ci
 cp .env.example .env
+
+# Public market data; no wallet or private key required.
+node --env-file=.env hl-markets.mjs --market perp
+node --env-file=.env hl-markets.mjs --market spot
+node --env-file=.env hl-info.mjs '{"type":"allMids"}'
 ```
 
-Edit `.env` with your credentials:
+The example `.env` selects **testnet**. Environment files are loaded only when you pass `--env-file=.env`; the scripts do not load them automatically. Existing shell environment variables take precedence over the file. If `HL_NETWORK` is unset, the CLI uses **mainnet**.
 
-```env
-HL_PRIVATE_KEY=0xYourPrivateKeyHere
-HL_ACCOUNT=0xYourWalletAddressHere
-FRED_API_KEY=YourFREDApiKey        # optional, see below
-NOSTR_SK=YourNostrSecretKeyHex     # optional
-```
-
-**FRED API key (optional, for `hl-events.mjs`):** Register for free at [fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/api_key.html) — it's a US government service, 100% free, no trial, no credit card. Without it, `hl-events.mjs` still works with hardcoded FOMC dates and crypto events.
-
-Then load the env vars before running any script. You can use [dotenv-cli](https://www.npmjs.com/package/dotenv-cli) or export them manually:
+To query your account, set `HL_ACCOUNT` in `.env`, then run:
 
 ```bash
-# Option A: dotenv-cli
-npx dotenv -- node hl-analysis.mjs
-
-# Option B: export manually
-export HL_PRIVATE_KEY=0x...
-export HL_ACCOUNT=0x...
-node hl-analysis.mjs
+node --env-file=.env hl-account.mjs
 ```
 
-## Dependencies
+## Configuration
 
-| Package | Purpose |
-|---|---|
-| `ethers` | EIP-712 signing and wallet management |
-| `@msgpack/msgpack` | MessagePack encoding for Hyperliquid L1 actions |
-| `nostr-tools` | Nostr event signing and relay publishing |
-| `@noble/hashes` | Hex-to-bytes conversion for Nostr keys |
-| `ws` | WebSocket client for Nostr relays |
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `HL_NETWORK` | No | `mainnet` or `testnet`; defaults to `mainnet`. |
+| `HL_ACCOUNT` | Account queries | Actual trading account address. `hl-account --user ADDRESS` overrides it. |
+| `HL_PRIVATE_KEY` | Live trade/cancel | Signing key, preferably an approved Hyperliquid API wallet. |
+| `HL_VAULT_ADDRESS` | No | Vault or subaccount target for exchange actions; also the default account-query target when set. |
 
-## Architecture
+For account reads, address precedence is `--user`, then `HL_VAULT_ADDRESS`, then `HL_ACCOUNT`. An API wallet signs for an account; its address is not the address to query for balances or positions. Configure the actual target account and an authorized signer. See [Hyperliquid's API wallet documentation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/nonces-and-api-wallets).
 
-All scripts are standalone Node.js ESM modules that communicate directly with the Hyperliquid API (`api.hyperliquid.xyz`) over HTTPS. No intermediate servers, no SDKs — just raw API calls and local EIP-712 signing.
+`HL_ACCOUNT` affects reads only. Ordinary exchange actions target the signer's account or the account that approved the API wallet; `HL_VAULT_ADDRESS` selects a vault or subaccount target.
 
+## Commands
+
+Run any command with `--help` for usage. Data and execution commands write JSON results to stdout; failures write a JSON error to stderr and exit nonzero.
+
+| Command | Purpose |
+| --- | --- |
+| `hl-info.mjs '<JSON>'` | Send a read-only request to `/info`. |
+| `hl-account.mjs [--user ADDRESS] [--dex NAME]` | Retrieve account mode, balances, positions, and open orders. |
+| `hl-markets.mjs --market spot\|perp [--dex NAME]` | Discover markets and their identifiers. |
+| `hl-orderbook.mjs <coin> [flags]` | Retrieve the market's L2 order book snapshot. |
+| `hl-trade.mjs <coin> <isBuy> <limitPx> <sz> [reduceOnly] [flags]` | Place one order with the supplied parameters. |
+| `hl-cancel.mjs <coin> <oid> [flags]` | Cancel one order by its order ID. |
+
+### Account modes and balances
+
+Hyperliquid account unification changes how balances are reported; spot and perpetual markets still have distinct asset identifiers. `hl-account` queries `userAbstraction` to detect the account's current mode.
+
+| Account mode | Balance interpretation |
+| --- | --- |
+| Unified account | `spotClearinghouseState` is authoritative for balances and holds shared by spot and perpetuals. |
+| Portfolio margin | `spotClearinghouseState` is authoritative for the unified portfolio's balances and holds. |
+| Standard | Spot and perpetual balances remain separate; perpetual balances are scoped to their DEX. |
+
+Do not add a unified account's spot balance to its perpetual account-value fields: that can double-count collateral. Perpetual state is still queried for positions. The account response identifies its balance source and includes raw API state. Legacy DEX-abstraction and unresolved default modes retain raw ledgers without inventing a combined balance.
+
+Account positions cover the selected perpetual DEX, which defaults to the native DEX. `--dex NAME` selects a builder-deployed DEX; it does not switch the account's abstraction mode. This is not a consolidated report of positions on every DEX. See the official [account abstraction modes](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/account-abstraction-modes).
+
+### Read data
+
+```bash
+# The account's default perpetual DEX and spot state.
+node --env-file=.env hl-account.mjs
+
+# Builder-deployed markets; replace NAME with a DEX on the selected network.
+node --env-file=.env hl-markets.mjs --market perp --dex NAME
+
+# Raw L2 order book snapshot.
+node --env-file=.env hl-orderbook.mjs BTC --market perp
+
+# Raw spot metadata.
+node --env-file=.env hl-info.mjs '{"type":"spotMeta"}'
 ```
-hl-analysis.mjs    reads    /info API (candles, meta, clearinghouse, orders)
-hl-events.mjs      reads    FRED API (macro dates) + events-crypto.json
-hl-trade.mjs       signs    EIP-712 → posts to /exchange API
-hl-cancel.mjs      signs    EIP-712 → posts to /exchange API
-hl-orderbook.mjs   reads    /info API (l2Book)
-nostr_post.mjs     signs    Nostr event → publishes to relays
+
+Use the identifiers returned by `hl-markets` for the selected network. Perpetual symbols use exact names, such as `BTC` or `DEX:SYMBOL`. Spot markets accept their metadata name, `BASE/QUOTE`, or `@pairIndex`; ambiguous names are rejected. Spot pair indices differ from token indices and can differ between mainnet and testnet. Order and cancellation commands resolve these to the exchange's [asset IDs](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/asset-ids).
+
+`hl-orderbook` returns `{network, market, book}` with the raw L2 snapshot. Prices are in quote units and sizes in base units. The snapshot covers a limited number of levels; it does not represent all available liquidity.
+
+### Place or cancel an order
+
+The following examples preview exchange actions on testnet. **Without `--dry-run`, trade and cancel commands submit signed actions immediately.** A dry run fetches metadata and validates the request without signing or submitting it; it does not simulate margin checks or execution.
+
+```bash
+# Buy 0.001 BTC perpetual contracts at a limit price of 60,000.
+HL_NETWORK=testnet node hl-trade.mjs BTC true 60000 0.001 --market perp --dry-run
+
+# Immediate-or-cancel: match at or better than the supplied price.
+HL_NETWORK=testnet node hl-trade.mjs BTC true 60000 0.001 --market perp --ioc --dry-run
+
+# A spot limit order. Choose a pair listed on the selected network.
+HL_NETWORK=testnet node hl-trade.mjs PURR/USDC true 0.1 100 --market spot --dry-run
+
+# Cancel a perpetual order; replace the order ID with an actual one.
+HL_NETWORK=testnet node hl-cancel.mjs BTC 1234567890 --market perp --dry-run
 ```
 
-Private keys never leave your machine. Only cryptographic signatures are transmitted.
+For `hl-trade`, `isBuy` is `true` for a buy and `false` for a sell. `limitPx` is in quote units per base unit; `sz` is in base units. The optional `reduceOnly` positional argument is `true` or `false`, defaulting to `false`. Perpetual buys and sells may open, reduce, or reverse a position depending on the existing position and `reduceOnly`.
 
-## Security
+| Flag | Applies to | Behavior |
+| --- | --- | --- |
+| `--market spot\|perp` | Trade, cancel, order book, markets | Select market type; defaults to `perp`. |
+| `--dex NAME` | Perpetual commands and account | Select a builder-deployed perpetual DEX; incompatible with spot. |
+| `--dry-run` | Trade, cancel | Preview validated actions without submitting them. |
+| `--ioc` | Trade | Immediate-or-cancel; may fill partially, canceling the remainder. |
+| `--alo` | Trade | Post-only limit order. |
+| `--trigger PX` | Perpetual trade | Market-on-trigger order; requires `--tpsl`. |
+| `--tpsl tp\|sl` | Perpetual trade | Take-profit or stop-loss type; requires `--trigger`. |
+| `--leverage N` | Perpetual trade | Explicitly update leverage; requires `--cross` or `--isolated`. |
+| `--cross` / `--isolated` | Perpetual trade | Margin mode; requires `--leverage`. |
 
-- Private keys are loaded exclusively from environment variables
-- No keys, addresses, or secrets are hardcoded in the source
-- `.env` is gitignored — never committed to the repository
-- All signing happens locally via EIP-712; only signatures are sent over the network
-- Scripts are CLI-only with no exposed servers or open ports
+The default is a good-till-canceled limit order. IoC execution is bounded by `limitPx`, so it is not an unbounded market order. Prices and sizes must satisfy the market's [tick and lot size rules](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/tick-and-lot-size).
+
+`--ioc` and `--alo` are mutually exclusive and cannot be combined with trigger orders. Trigger orders use `isMarket: true`; their `reduceOnly` setting remains explicit. Spot orders do not accept triggers, `reduceOnly=true`, or leverage/margin flags. Decimal inputs are validated without rounding; exponent notation is not accepted.
+
+Leverage and margin settings are unchanged unless explicitly requested. A leverage update and order placement are separate exchange actions: a successful update is not rolled back if the order fails. In that case, the error includes `completedActions` and `failedAction`; inspect the account state before retrying. Trade and cancel results include the selected network and `vaultAddress` (`null` for ordinary account actions).
+
+## Use with an AI agent
+
+Give your agent access to the CLI and the [tool reference in `SKILL.md`](SKILL.md). The calling application controls which commands the agent may run and supplies any trading decisions or authorization policy. Loading the reference does not start a process or grant permission to trade.
+
+**Recommended optional model:** [Claude Opus 5.5](https://www.anthropic.com/claude/opus) (`claude-opus-5-5`). Choose it in your agent runtime; HyperAgent is model-independent and does not call an LLM API or require an LLM API key.
+
+## Security and scope
+
+- Public market data and account queries require no signing key. Keep read-only integrations keyless.
+- Prefer a dedicated, approved API wallet for signing. Keep private keys out of prompts, command arguments, logs, and version control.
+- `.env` is ignored by Git. Protect it locally; anyone who can read the signing key may exercise its permissions.
+- Exchange requests are signed locally and sent to the selected Hyperliquid API. Private keys are not included in request bodies.
+- The CLI has no withdrawal, transfer, account-mode migration, or API-wallet approval commands. It also supplies no portfolio limits or automatic position management.
+- Check order status after uncertain network results before resubmitting a write; a lost response does not prove an order was rejected.
+- Serialize exchange calls sharing a signer, or use separate approved API wallets for independent processes, to avoid nonce collisions.
+
+See [SECURITY.md](SECURITY.md) for reporting guidance and [Hyperliquid's exchange API](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint) for action semantics.
+
+## Development
+
+```bash
+npm ci
+npm test
+npm run check
+```
+
+Tests use fixtures and mocked requests; they do not place live orders. Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a change. Breaking changes from the strategy-oriented v1 toolkit are listed in [CHANGELOG.md](CHANGELOG.md).
+
+### API references
+
+- [Info endpoint](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint)
+- [Spot metadata and account state](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint/spot)
+- [Perpetual metadata and account state](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint/perpetuals)
+- [Exchange endpoint](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint)
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © Federico Nussbaumer.

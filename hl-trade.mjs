@@ -1,241 +1,75 @@
 #!/usr/bin/env node
-/**
- * Hyperliquid order placement with correct EIP-712 signing
- * Based on hyperliquid-python-sdk signing.py
- * 
- * Usage: node hl-trade.mjs <asset_index> <isBuy> <limitPx> <sz> [reduceOnly]
- * Example: node hl-trade.mjs 0 true 60000 0.001   (BTC long)
- * 
- * Set env: HL_PRIVATE_KEY, HL_ACCOUNT
- */
+import { clientFromEnv, createClient, assertExchangeSuccess } from './lib/hyperliquid.mjs';
+import { resolveMarket, positiveDecimal, validatePrice, validateSize } from './lib/markets.mjs';
+import { booleanValue, parseCli, runCli } from './lib/execution-cli.mjs';
 
-import { ethers } from 'ethers';
-import { encode } from '@msgpack/msgpack';
-import https from 'https';
+const usage = 'node hl-trade.mjs <coin> <isBuy:true|false> <limitPx> <sz> [reduceOnly:true|false] [--market perp|spot] [--dex name] [--ioc|--alo] [--trigger px --tpsl tp|sl] [--leverage N --cross|--isolated] [--dry-run]';
 
-if (!process.env.HL_PRIVATE_KEY || !process.env.HL_ACCOUNT) {
-  console.error('Missing env vars. Set HL_PRIVATE_KEY and HL_ACCOUNT (see .env.example)');
-  process.exit(1);
-}
-
-const PRIVATE_KEY = process.env.HL_PRIVATE_KEY;
-const ACCOUNT = process.env.HL_ACCOUNT;
-const IS_MAINNET = true;
-
-// --- Asset name to index mapping (fetch from API) ---
-async function getAssetIndex(coin) {
-  const data = await postInfo({ type: 'meta' });
-  const idx = data.universe.findIndex(u => u.name === coin);
-  if (idx === -1) throw new Error(`Asset ${coin} not found. Available: ${data.universe.map(u=>u.name).join(', ')}`);
-  return idx;
-}
-
-// --- Info API ---
-const HTTP_TIMEOUT = 15000;
-
-function postInfo(body) {
-  return new Promise((resolve, reject) => {
-    const payload = JSON.stringify(body);
-    const req = https.request({
-      hostname: 'api.hyperliquid.xyz', port: 443, path: '/info', method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
-    }, res => {
-      let d = ''; res.on('data', c => d += c); res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
-    });
-    req.setTimeout(HTTP_TIMEOUT, () => { req.destroy(); reject(new Error('Request timeout')); });
-    req.on('error', reject); req.write(payload); req.end();
+export async function main(args, { client, env = process.env } = {}) {
+  const { values, positionals } = parseCli(args, {
+    market: { type: 'string', default: 'perp' }, dex: { type: 'string', default: '' },
+    ioc: { type: 'boolean' }, alo: { type: 'boolean' }, trigger: { type: 'string' }, tpsl: { type: 'string' },
+    leverage: { type: 'string' }, cross: { type: 'boolean' }, isolated: { type: 'boolean' },
+    'dry-run': { type: 'boolean' }, help: { type: 'boolean' },
   });
-}
-
-// --- Exchange API ---
-function postExchange(body) {
-  return new Promise((resolve, reject) => {
-    const payload = JSON.stringify(body);
-    const req = https.request({
-      hostname: 'api.hyperliquid.xyz', port: 443, path: '/exchange', method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
-    }, res => {
-      let d = ''; res.on('data', c => d += c); res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(new Error(d)); } });
-    });
-    req.setTimeout(HTTP_TIMEOUT, () => { req.destroy(); reject(new Error('Request timeout')); });
-    req.on('error', reject); req.write(payload); req.end();
-  });
-}
-
-// --- Signing (matches Python SDK exactly) ---
-function actionHash(action, vaultAddress, nonce) {
-  // msgpack encode the action
-  const packed = encode(action);
-  // nonce as 8 bytes big-endian
-  const nonceBuf = Buffer.alloc(8);
-  nonceBuf.writeBigUInt64BE(BigInt(nonce));
-  // no vault
-  const vaultByte = Buffer.from([0x00]);
-  
-  const combined = Buffer.concat([Buffer.from(packed), nonceBuf, vaultByte]);
-  return ethers.keccak256(combined);
-}
-
-function constructPhantomAgent(hash, isMainnet) {
-  return { source: isMainnet ? 'a' : 'b', connectionId: hash };
-}
-
-async function signL1Action(wallet, action, nonce) {
-  const hash = actionHash(action, null, nonce);
-  const phantomAgent = constructPhantomAgent(hash, IS_MAINNET);
-  
-  const domain = {
-    chainId: 1337,
-    name: 'Exchange',
-    verifyingContract: '0x0000000000000000000000000000000000000000',
-    version: '1',
-  };
-  
-  const types = {
-    Agent: [
-      { name: 'source', type: 'string' },
-      { name: 'connectionId', type: 'bytes32' },
-    ],
-  };
-  
-  const signature = await wallet.signTypedData(domain, types, phantomAgent);
-  return { r: '0x' + signature.slice(2, 66), s: '0x' + signature.slice(66, 130), v: parseInt(signature.slice(130, 132), 16) };
-}
-
-// --- Float formatting (matches SDK) ---
-function floatToWire(x) {
-  const rounded = parseFloat(x.toPrecision(5));
-  if (Math.abs(rounded - x) >= 1e-12 * Math.abs(x)) {
-    throw new Error(`floatToWire: ${x} rounds to ${rounded}`);
+  if (values.help) return { usage };
+  if (positionals.length < 4 || positionals.length > 5) throw new Error(usage);
+  const [coin, side, priceInput, sizeInput, reduceInput = 'false'] = positionals;
+  const isBuy = booleanValue(side, 'isBuy');
+  const reduceOnly = booleanValue(reduceInput, 'reduceOnly');
+  positiveDecimal(priceInput, 'Price');
+  positiveDecimal(sizeInput, 'Size');
+  if (values.ioc && values.alo) throw new Error('--ioc and --alo are mutually exclusive');
+  if (values.trigger !== undefined && (values.ioc || values.alo)) throw new Error('Trigger orders cannot use --ioc or --alo');
+  if ((values.tpsl !== undefined) !== (values.trigger !== undefined)) throw new Error('--trigger and --tpsl must be supplied together');
+  if (values.tpsl !== undefined && !['tp', 'sl'].includes(values.tpsl)) throw new Error('--tpsl must be tp or sl');
+  if (values.trigger !== undefined) positiveDecimal(values.trigger, 'Trigger price');
+  if (values.cross && values.isolated) throw new Error('--cross and --isolated are mutually exclusive');
+  if ((values.cross || values.isolated) && values.leverage === undefined) throw new Error('--cross/--isolated requires --leverage');
+  let leverage;
+  if (values.leverage !== undefined) {
+    if (!values.cross && !values.isolated) throw new Error('--leverage requires explicit --cross or --isolated');
+    leverage = Number(values.leverage);
+    if (!/^\d+$/.test(values.leverage) || !Number.isSafeInteger(leverage) || leverage < 1) throw new Error('--leverage must be a positive integer');
   }
-  return rounded.toString();
-}
-
-// --- Main ---
-async function main() {
-  const coinOrIndex = process.argv[2] || 'BTC';
-  const isBuy = (process.argv[3] || 'true') === 'true';
-  const limitPx = parseFloat(process.argv[4]);
-  const sz = parseFloat(process.argv[5]);
-  const reduceOnly = (process.argv[6] || 'false') === 'true';
-  
-  if (!limitPx || !sz) {
-    console.error('Usage: node hl-trade.mjs <coin> <isBuy> <limitPx> <sz> [reduceOnly]');
-    console.error('Example: node hl-trade.mjs BTC true 60000 0.001');
-    process.exit(1);
+  if (values.market === 'spot' && (reduceOnly || leverage !== undefined || values.cross || values.isolated)) {
+    throw new Error('Spot orders do not support reduceOnly or leverage/margin flags');
   }
-  
-  // Resolve asset index
-  let assetIndex;
-  if (/^\d+$/.test(coinOrIndex)) {
-    assetIndex = parseInt(coinOrIndex);
-  } else {
-    console.log(`Resolving asset index for ${coinOrIndex}...`);
-    assetIndex = await getAssetIndex(coinOrIndex);
-    console.log(`${coinOrIndex} = asset index ${assetIndex}`);
-  }
-  
-  const wallet = new ethers.Wallet(PRIVATE_KEY);
-  console.log(`\n📝 ORDER:`);
-  console.log(`   Coin:     ${coinOrIndex} (index ${assetIndex})`);
-  console.log(`   Side:     ${isBuy ? 'LONG' : 'SHORT'}`);
-  console.log(`   Price:    $${limitPx}`);
-  console.log(`   Size:     ${sz}`);
-  console.log(`   Reduce:   ${reduceOnly}`);
-  console.log(`   Signer:   ${wallet.address}`);
-  console.log(`   Account:  ${ACCOUNT}\n`);
-  
-  // Check for trigger (stop) order: --trigger <triggerPx> --tpsl <tp|sl>
-  const triggerIdx = process.argv.indexOf('--trigger');
-  const tpslIdx = process.argv.indexOf('--tpsl');
-  const triggerPx = triggerIdx > 0 ? parseFloat(process.argv[triggerIdx + 1]) : null;
-  const tpsl = tpslIdx > 0 ? process.argv[tpslIdx + 1] : 'sl'; // 'tp' or 'sl'
+  if (values.market === 'spot' && values.trigger !== undefined) throw new Error('Trigger orders are supported only for perpetuals by this CLI');
 
-  let orderType;
-  if (triggerPx) {
-    const isMarket = true; // trigger orders execute at market
-    // Key order MUST match Python SDK: isMarket, triggerPx, tpsl
-    orderType = {
-      trigger: {
-        isMarket,
-        triggerPx: floatToWire(triggerPx),
-        tpsl,
-      }
-    };
-    console.log(`   Trigger:  $${triggerPx} (${tpsl})`);
-  } else {
-    const isIoc = process.argv.includes('--ioc');
-    orderType = { limit: { tif: isIoc ? 'Ioc' : 'Gtc' } };
-    if (isIoc) console.log(`   Mode:     IoC (market/immediate)`);
+  client ??= values['dry-run']
+    ? createClient({ network: env.HL_NETWORK || 'mainnet', vaultAddress: env.HL_VAULT_ADDRESS || undefined })
+    : clientFromEnv(env);
+  const market = await resolveMarket(client, coin, { market: values.market, dex: values.dex });
+  if (market.isDelisted) throw new Error(`Market ${market.coin} is delisted`);
+  const price = validatePrice(priceInput, market);
+  const size = validateSize(sizeInput, market);
+  const type = values.trigger !== undefined
+    ? { trigger: { isMarket: true, triggerPx: validatePrice(values.trigger, market, 'Trigger price'), tpsl: values.tpsl } }
+    : { limit: { tif: values.ioc ? 'Ioc' : values.alo ? 'Alo' : 'Gtc' } };
+  if (leverage !== undefined && Number.isFinite(market.maxLeverage) && leverage > market.maxLeverage) throw new Error(`Leverage exceeds market maximum ${market.maxLeverage}`);
+  if (leverage !== undefined && values.cross && (market.onlyIsolated || ['strictIsolated', 'noCross'].includes(market.marginMode))) {
+    throw new Error('This market supports isolated margin only');
   }
-
-  // Set isolated margin mode before placing order (Fede 4-Mar-2026)
-  const levIdx = process.argv.indexOf('--leverage');
-  const leverageVal = levIdx !== -1 ? (parseInt(process.argv[levIdx + 1]) || 1) : 1;
-  const setIsolated = !process.argv.includes('--cross');
-  {
-    const levAction = {
-      type: 'updateLeverage',
-      asset: assetIndex,
-      isCross: !setIsolated,
-      leverage: leverageVal,
-    };
-    const levNonce = Date.now();
-    console.log(`🔧 Setting ${setIsolated ? 'ISOLATED' : 'CROSS'} margin, leverage ${leverageVal}x...`);
-    const levSig = await signL1Action(wallet, levAction, levNonce);
-    const levResp = await postExchange({ action: levAction, nonce: levNonce, signature: levSig, vaultAddress: null });
-    if (levResp.status === 'ok') {
-      console.log(`   ✅ Margin mode set\n`);
-    } else {
-      console.log(`   ⚠️ Margin update: ${JSON.stringify(levResp)}\n`);
+  const actions = [];
+  if (leverage !== undefined) actions.push({ type: 'updateLeverage', asset: market.asset, isCross: !!values.cross, leverage });
+  actions.push({ type: 'order', orders: [{ a: market.asset, b: isBuy, p: price, s: size, r: reduceOnly, t: type }], grouping: 'na' });
+  if (values['dry-run']) return { dryRun: true, network: client.network, vaultAddress: client.vaultAddress ?? null, market, actions };
+  const responses = [];
+  const completedActions = [];
+  for (const action of actions) {
+    try {
+      const response = assertExchangeSuccess(await client.exchange(action));
+      responses.push(response);
+      completedActions.push({ action, response });
+    } catch (error) {
+      // Leverage and order submissions are separate transactions, not atomic.
+      if (completedActions.length) error.completedActions = completedActions;
+      error.failedAction = action;
+      throw error;
     }
   }
-
-  const orderWire = {
-    a: assetIndex,
-    b: isBuy,
-    p: floatToWire(limitPx),
-    s: floatToWire(sz),
-    r: reduceOnly,
-    t: orderType,
-  };
-  
-  const action = {
-    type: 'order',
-    orders: [orderWire],
-    grouping: 'na',
-  };
-  
-  const nonce = Date.now() + 1; // +1 to avoid collision with leverage nonce
-  console.log('✍️  Signing with EIP-712...');
-  const signature = await signL1Action(wallet, action, nonce);
-  console.log(`   Signature v=${signature.v}`);
-  
-  const payload = {
-    action,
-    nonce,
-    signature,
-    vaultAddress: null,
-  };
-  
-  console.log('\n📤 Sending to /exchange...');
-  const response = await postExchange(payload);
-  
-  console.log('\n📥 RESPONSE:');
-  console.log(JSON.stringify(response, null, 2));
-  
-  if (response.status === 'ok') {
-    const statuses = response.response?.data?.statuses;
-    if (statuses) {
-      for (const s of statuses) {
-        if (s.resting) console.log(`\n✅ ORDER RESTING: oid=${s.resting.oid}`);
-        if (s.filled) console.log(`\n✅ ORDER FILLED: oid=${s.filled.oid} avgPx=${s.filled.avgPx}`);
-        if (s.error) console.log(`\n❌ ORDER ERROR: ${s.error}`);
-      }
-    }
-  } else {
-    console.log(`\n❌ ERROR: ${response.status || JSON.stringify(response)}`);
-  }
+  return { network: client.network, vaultAddress: client.vaultAddress ?? null, market, responses };
 }
 
-main().catch(e => { console.error('❌', e.message); process.exit(1); });
+runCli(import.meta.url, main);
