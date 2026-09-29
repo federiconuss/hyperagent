@@ -1,20 +1,32 @@
 {
   "name": "hyperagent",
-  "version": "1.5.4",
-  "description": "CLI tools for trading on Hyperliquid — analysis, order placement, cancellation, and orderbook depth",
+  "version": "2.0.0",
+  "description": "JSON CLI tools for agents to access Hyperliquid spot and perpetual markets",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/federiconuss/hyperagent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/federiconuss/hyperagent/issues"
+  },
+  "homepage": "https://github.com/federiconuss/hyperagent#readme",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "analysis": "node hl-analysis.mjs",
+    "info": "node hl-info.mjs",
+    "account": "node hl-account.mjs",
+    "markets": "node hl-markets.mjs",
     "trade": "node hl-trade.mjs",
     "cancel": "node hl-cancel.mjs",
     "orderbook": "node hl-orderbook.mjs",
-    "events": "node hl-events.mjs"
+    "test": "node --test",
+    "check": "node scripts/check.mjs"
   },
   "dependencies": {
     "ethers": "^6.0.0",
-    "@msgpack/msgpack": "^3.0.0",
-    "nostr-tools": "^2.0.0",
-    "@noble/hashes": "^1.0.0",
-    "ws": "^8.0.0"
+    "@msgpack/msgpack": "^3.0.0"
   }
 }
