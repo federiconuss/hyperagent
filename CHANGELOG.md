@@ -1,11 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- Make sharing `SKILL.md` with an agent the primary setup flow.
-- Add agent setup instructions for obtaining the released CLI, preparing its runtime, and verifying public API access without credentials.
-- Keep manual CLI installation as an alternative and clarify the execution capabilities required by the agent.
-
 ## 2.0.0 — 2026-09-29
 
 HyperAgent becomes a neutral Hyperliquid CLI connector. This is a breaking change from the strategy-oriented v1 toolkit.
@@ -18,10 +12,12 @@ HyperAgent becomes a neutral Hyperliquid CLI connector. This is a breaking chang
 - Testnet selection, exchange-action dry runs, and explicit vault/subaccount targeting.
 - Shared API, asset-resolution, precision, and signing utilities with automated checks.
 - Node.js 22+ requirement, contributor guidance, and security reporting documentation.
+- Agent setup instructions for obtaining the released CLI, preparing its runtime, and verifying public API access without credentials.
 
 ### Changed
 
-- `SKILL.md` is now a tool reference; the caller supplies decisions and authorization.
+- Sharing `SKILL.md` with an agent is the primary setup flow; the caller supplies decisions and authorization.
+- Manual CLI installation remains an alternative, with the agent's required execution capabilities documented.
 - Commands return JSON suitable for agent and application integration.
 - Order placement preserves leverage and margin mode unless explicitly updated.
 - Order book output returns the raw L2 snapshot without trading recommendations or sizing estimates.
