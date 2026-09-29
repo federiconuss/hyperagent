@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 — Unreleased
+## 2.0.0 — 2026-09-29
 
 HyperAgent becomes a neutral Hyperliquid CLI connector. This is a breaking change from the strategy-oriented v1 toolkit.
 
@@ -36,4 +36,4 @@ HyperAgent becomes a neutral Hyperliquid CLI connector. This is a breaking chang
 5. Remove assumptions that each trade resets leverage, installs protective orders, or follows a bundled strategy. Apply any desired policies in your calling application.
 6. Preview intended orders and cancellations with `--dry-run` and validate integrations on testnet before using mainnet.
 
-Existing release history is available on [GitHub Releases](https://github.com/federiconuss/hyperagent/releases).
+Source snapshots of earlier versions remain available through [Git tags](https://github.com/federiconuss/hyperagent/tags).
